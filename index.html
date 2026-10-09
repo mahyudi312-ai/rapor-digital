@@ -46,6 +46,7 @@
   <nav class="nav-tabs">
     <button class="nav-tab active" onclick="switchTab('rapor', this)">📄 Rapor</button>
     <button class="nav-tab" onclick="switchTab('input', this)">✏️ Input Nilai</button>
+    <button class="nav-tab" onclick="switchTab('ujian', this)">📝 Ujian</button>
     <button class="nav-tab" onclick="switchTab('kasus', this)">⚖️ Kasus</button>
     <button class="nav-tab" onclick="switchTab('reward', this)">🏆 Reward</button>
     <button class="nav-tab" onclick="switchTab('siswa', this)">👥 Siswa</button>
@@ -106,7 +107,42 @@
       </div>
     </div>
   </div>
+  <!-- TAB UJIAN -->
+  <div class="tab-content" id="tab-ujian" style="display:none;">
+    <div class="input-container">
+      <div class="input-header" style="background: linear-gradient(135deg, #fef3c7 0%, white 100%);">
+        <h2>📝 Input Nilai Ujian</h2>
+        <p>Input nilai MID & UAS Semester 1 & 2 per mata pelajaran</p>
+      </div>
+      <div class="input-form">
+        <div class="form-group">
+          <label>Pilih Mata Pelajaran</label>
+          <select id="ujianMapel" onchange="renderUjianTable()">
+            <option value="">-- Pilih Mapel --</option>
+          </select>
+        </div>
 
+        <div id="ujianTableContainer" style="display:none;">
+          <div class="tp-table-header">
+            <h3>📋 Nilai Ujian per Siswa</h3>
+            <p>Isi nilai MID dan UAS untuk masing-masing semester. Kosongkan jika belum ada.</p>
+          </div>
+          <div class="tp-table-wrapper">
+            <table class="tp-table" id="ujianTable"></table>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary btn-lg" onclick="simpanSemuaUjian()">💾 Simpan Semua Nilai Ujian</button>
+            <button class="btn btn-outline btn-lg" onclick="renderUjianTable()">🔄 Refresh</button>
+          </div>
+        </div>
+
+        <div id="emptyUjian" class="empty-tp">
+          <div class="empty-icon">📝</div>
+          <p>Pilih Mata Pelajaran untuk mulai input nilai ujian</p>
+        </div>
+      </div>
+    </div>
+  </div>
   <!-- TAB KASUS -->
   <div class="tab-content" id="tab-kasus" style="display:none;">
     <div class="input-container">
