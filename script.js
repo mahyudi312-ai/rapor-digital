@@ -126,7 +126,8 @@ const KOMPONEN_LIST = [
 ];
 
 const DEFAULT_BOBOT = { TH: 0.20, PR: 0.10, KUI: 0.15, PRA: 0.15, SIK: 0.10, BIC: 0.10, MAJ: 0.10, PRE: 0.10 };
-
+// Bobot Ujian: Harian 50% + MID 20% + UAS 30%
+const BOBOT_UJIAN = { HARIAN: 0.5, MID: 0.2, UAS: 0.3 };
 const DEFAULT_KKTP = { PAI: 75, PP: 75, BIN: 75, MTK: 75, IPAS: 75, BIG: 70, PJOK: 75, SMUS: 75, KKA: 75, TAHF: 75 };
 
 const JENIS_KASUS = [
@@ -238,23 +239,66 @@ function getStatusKedisiplinan(nis) {
   if (netto > -10) return { label: "⚠️ Perlu Perhatian", kelas: "perhatian" };
   return { label: "🚨 Perlu Bimbingan", kelas: "berat" };
 }
+// Hitung nilai akhir mapel (Harian + Ujian)
+function getNilaiAkhirMapel(nis, mapel) {
+  const nilaiHarian = nilaiData[nis]?.[mapel] || 0;
+  const ujian = nilaiData[nis]?.UJIAN?.[mapel] || {};
+  const smt = SEMESTER_AKTIF;
+  const mid = smt === 1 ? ujian.MID1 : ujian.MID2;
+  const uas = smt === 1 ? ujian.UAS1 : ujian.UAS2;
 
+  // Kalau belum ada ujian, pakai harian saja
+  if (!mid && !uas) return nilaiHarian;
+  if (!nilaiHarian && (mid || uas)) {
+    // Ada ujian tapi belum ada harian → pakai ujian saja
+    let total = 0, bobot = 0;
+    if (mid) { total += mid * BOBOT_UJIAN.MID; bobot += BOBOT_UJIAN.MID; }
+    if (uas) { total += uas * BOBOT_UJIAN.UAS; bobot += BOBOT_UJIAN.UAS; }
+    return bobot > 0 ? Math.round(total / bobot) : 0;
+  }
+
+  // Keduanya ada → hitung dengan bobot
+  let total = nilaiHarian * BOBOT_UJIAN.HARIAN;
+  let bobot = BOBOT_UJIAN.HARIAN;
+  if (mid) { total += mid * BOBOT_UJIAN.MID; bobot += BOBOT_UJIAN.MID; }
+  if (uas) { total += uas * BOBOT_UJIAN.UAS; bobot += BOBOT_UJIAN.UAS; }
+  return Math.round(total / bobot);
+}
 function getRanking() {
   return students.map(s => {
     const n = nilaiData[s.nis] || {};
-    const only = {};
+    // Ambil nilai harian (bukan _TP atau _BAB atau UJIAN)
+    const harianOnly = {};
     Object.entries(n).forEach(([k, v]) => {
-      if (!k.includes("_") && typeof v === "number") only[k] = v;
+      if (!k.includes("_") && k !== "UJIAN" && typeof v === "number") harianOnly[k] = v;
     });
-    const rataAsli = hitungRataRata(only);
+    
+    // Hitung nilai akhir per mapel (Harian + Ujian)
+    const nilaiAkhir = {};
+    mapelList.forEach(m => {
+      const na = getNilaiAkhirMapel(s.nis, m.kode);
+      if (na > 0) nilaiAkhir[m.kode] = na;
+    });
+    
+    const rataAsli = hitungRataRata(nilaiAkhir);
     const k = getKasusSiswa(s.nis);
     const r = getRewardSiswa(s.nis);
     const netto = k.poinGlobal + r.poinGlobal;
     const rataAkhir = Math.max(75, Math.min(100, rataAsli + netto));
-    return { ...s, nilai: only, rata: rataAkhir, rataAsli, totalPoinKasus: k.totalPoin, totalPoinReward: r.totalPoin, jumlahKasus: k.jumlahKasus, jumlahReward: r.jumlahReward };
+    
+    return {
+      ...s,
+      nilai: nilaiAkhir,       // nilai akhir (dengan ujian)
+      nilaiHarian: harianOnly,  // nilai harian (tanpa ujian)
+      rata: rataAkhir,
+      rataAsli,
+      totalPoinKasus: k.totalPoin,
+      totalPoinReward: r.totalPoin,
+      jumlahKasus: k.jumlahKasus,
+      jumlahReward: r.jumlahReward
+    };
   }).sort((a, b) => b.rata - a.rata);
 }
-
 function showToast(msg, type = "success") {
   const t = document.getElementById("toast");
   if (!t) return;
