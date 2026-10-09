@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rapor Digital — Kelas 5A SDN 09 Kota Bengkulu</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div class="login-logo">📚</div>
+    <h1>Rapor Digital</h1>
+    <p>SDN 09 Kota Bengkulu — Kelas 5A</p>
+    <div class="form-group" style="margin-top: 24px;">
+      <label>Password Guru</label>
+      <input type="password" id="loginPassword" placeholder="Masukkan password..." onkeypress="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="loginError" style="color: var(--danger); font-size: 13px; margin-bottom: 12px; display: none;">❌ Password salah!</div>
+    <button class="btn btn-primary btn-lg" style="width: 100%;" onclick="doLogin()">🔓 Masuk</button>
+    <p style="margin-top: 20px; font-size: 12px; color: var(--gray-500);">Default password: <b>guru2025</b><br>Ubah di tab Pengaturan setelah login</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none;">
+
+  <header class="app-header">
+    <div class="header-left">
+      <div class="logo">📚</div>
+      <div>
+        <h1>Rapor Digital</h1>
+        <p>Kelas 5A SDN 09 Kota Bengkulu — <span id="semesterLabel">Semester 1</span></p>
+      </div>
+    </div>
+    <div class="header-right">
+      <button class="btn btn-outline" onclick="openCetakBatch()">🖨️ Cetak Batch</button>
+      <button class="btn btn-outline" onclick="exportData()">💾 Export</button>
+      <button class="btn btn-outline" onclick="logout()">🚪 Keluar</button>
+    </div>
+  </header>
+
+  <nav class="nav-tabs">
+    <button class="nav-tab active" onclick="switchTab('rapor', this)">📄 Rapor</button>
+    <button class="nav-tab" onclick="switchTab('input', this)">✏️ Input Nilai</button>
+    <button class="nav-tab" onclick="switchTab('kasus', this)">⚖️ Kasus</button>
+    <button class="nav-tab" onclick="switchTab('reward', this)">🏆 Reward</button>
+    <button class="nav-tab" onclick="switchTab('siswa', this)">👥 Siswa</button>
+    <button class="nav-tab" onclick="switchTab('leger', this)">📊 Leger</button>
+    <button class="nav-tab" onclick="switchTab('dashboard', this)">📈 Dashboard</button>
+    <button class="nav-tab" onclick="switchTab('pengaturan', this)">⚙️ Pengaturan</button>
+  </nav>
+
+  <!-- TAB RAPOR -->
+  <div class="app-container" id="tab-rapor">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>🏆 Daftar Siswa</h2>
+        <p>Diurutkan berdasarkan nilai tertinggi</p>
+      </div>
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="🔍 Cari nama siswa..." onkeyup="filterStudents()">
+      </div>
+      <ul class="student-list" id="studentList"></ul>
+    </aside>
+    <main class="main-content" id="raporView">
+      <div class="empty-state">
+        <div class="empty-icon">📄</div>
+        <h2>Pilih Siswa</h2>
+        <p>Klik nama siswa di panel kiri untuk melihat rapor lengkap</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- TAB INPUT NILAI -->
+  <div class="tab-content" id="tab-input" style="display:none;">
+    <div class="input-container">
+      <div class="input-header">
+        <h2>✏️ Input Nilai Siswa</h2>
+        <p>Pilih siswa, mapel, dan bab — sistem otomatis menampilkan semua TP</p>
+      </div>
+      <div class="input-form">
+        <div class="form-row">
+          <div class="form-group"><label>Pilih Siswa</label><select id="inputSiswa" onchange="renderTPTable()"></select></div>
+          <div class="form-group"><label>Mata Pelajaran</label><select id="inputMapel" onchange="updateBabOptions()"></select></div>
+        </div>
+        <div class="form-group"><label>Bab</label><select id="inputBab" onchange="renderTPTable()"></select></div>
+        <div id="tpTableContainer" style="display:none;">
+          <div class="tp-table-header">
+            <h3>📋 Daftar Tujuan Pembelajaran</h3>
+            <p>Isi nilai di kolom komponen yang tersedia</p>
+          </div>
+          <div class="tp-table-wrapper"><table class="tp-table" id="tpTable"></table></div>
+          <div class="form-actions">
+            <button class="btn btn-primary btn-lg" onclick="simpanSemuaNilai()">💾 Simpan Semua Nilai</button>
+            <button class="btn btn-outline btn-lg" onclick="resetTPTable()">🔄 Reset</button>
+          </div>
+        </div>
+        <div id="emptyTP" class="empty-tp">
+          <div class="empty-icon">📝</div>
+          <p>Pilih Siswa, Mapel, dan Bab</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB KASUS -->
+  <div class="tab-content" id="tab-kasus" style="display:none;">
+    <div class="input-container">
+      <div class="input-header" style="background: linear-gradient(135deg, #fee2e2 0%, white 100%);">
+        <h2>⚖️ Modul Kasus</h2>
+        <p>Catat pelanggaran → poin otomatis terpotong</p>
+      </div>
+      <div style="padding: 24px 32px;">
+        <h3 class="section-title">📊 Rekap Poin per Siswa</h3>
+        <div id="rekapKasusContent"></div>
+      </div>
+      <div style="padding: 24px 32px; border-top: 2px solid var(--gray-200);">
+        <h3 class="section-title">➕ Tambah Kasus</h3>
+        <div class="form-row">
+          <div class="form-group"><label>Siswa</label><select id="kasusSiswa"></select></div>
+          <div class="form-group"><label>Tanggal</label><input type="date" id="kasusTanggal"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Jenis Kasus</label><select id="kasusKode" onchange="updateKasusPreview()"></select></div>
+          <div class="form-group"><label>Mapel (opsional)</label><select id="kasusMapel" onchange="updateKasusPreview()"><option value="">-- Global --</option></select></div>
+        </div>
+        <div class="form-group"><label>Keterangan</label><input type="text" id="kasusKet" placeholder="Keterangan..."></div>
+        <div id="kasusPreview" style="display:none; padding: 14px 18px; background: var(--danger-light); border-radius: var(--radius-sm); border-left: 4px solid var(--danger); margin-bottom: 16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--danger);">Poin</div>
+              <div id="kasusPreviewDetail" style="font-size:13px; color:var(--gray-700); margin-top:4px;"></div>
+            </div>
+            <div id="kasusPreviewPoin" style="font-family:'Poppins'; font-size:28px; font-weight:800; color:var(--danger);">0</div>
+          </div>
+        </div>
+        <div class="form-actions" style="border-top:none; padding-top:0; margin-top:0;">
+          <button class="btn btn-primary btn-lg" onclick="simpanKasus()">💾 Simpan</button>
+          <button class="btn btn-outline btn-lg" onclick="resetFormKasus()">🔄 Reset</button>
+        </div>
+      </div>
+      <div style="padding: 24px 32px; border-top: 2px solid var(--gray-200);">
+        <h3 class="section-title">📜 Log Kasus</h3>
+        <div id="logKasusContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB REWARD -->
+  <div class="tab-content" id="tab-reward" style="display:none;">
+    <div class="input-container">
+      <div class="input-header" style="background: linear-gradient(135deg, #dcfce7 0%, white 100%);">
+        <h2>🏆 Reward & Poin Plus</h2>
+        <p>Catat prestasi siswa → poin plus menambah nilai</p>
+      </div>
+      <div style="padding: 24px 32px;">
+        <h3 class="section-title">📊 Rekap Poin Plus</h3>
+        <div id="rekapRewardContent"></div>
+      </div>
+      <div style="padding: 24px 32px; border-top: 2px solid var(--gray-200);">
+        <h3 class="section-title">➕ Tambah Reward</h3>
+        <div class="form-row">
+          <div class="form-group"><label>Siswa</label><select id="rewardSiswa"></select></div>
+          <div class="form-group"><label>Tanggal</label><input type="date" id="rewardTanggal"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Jenis Reward</label><select id="rewardKode" onchange="updateRewardPreview()"></select></div>
+          <div class="form-group"><label>Mapel (opsional)</label><select id="rewardMapel"><option value="">-- Global --</option></select></div>
+        </div>
+        <div class="form-group"><label>Keterangan</label><input type="text" id="rewardKet" placeholder="Keterangan..."></div>
+        <div id="rewardPreview" style="display:none; padding: 14px 18px; background: var(--success-light); border-radius: var(--radius-sm); border-left: 4px solid var(--success); margin-bottom: 16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--success);">Poin Plus</div>
+              <div id="rewardPreviewDetail" style="font-size:13px; color:var(--gray-700); margin-top:4px;"></div>
+            </div>
+            <div id="rewardPreviewPoin" style="font-family:'Poppins'; font-size:28px; font-weight:800; color:var(--success);">0</div>
+          </div>
+        </div>
+        <div class="form-actions" style="border-top:none; padding-top:0; margin-top:0;">
+          <button class="btn btn-primary btn-lg" onclick="simpanReward()">💾 Simpan</button>
+          <button class="btn btn-outline btn-lg" onclick="resetFormReward()">🔄 Reset</button>
+        </div>
+      </div>
+      <div style="padding: 24px 32px; border-top: 2px solid var(--gray-200);">
+        <h3 class="section-title">📜 Log Reward</h3>
+        <div id="logRewardContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB SISWA -->
+  <div class="tab-content" id="tab-siswa" style="display:none;">
+    <div class="input-container">
+      <div class="input-header">
+        <h2>👥 Manajemen Siswa</h2>
+        <p>Kelola data siswa kelas 5A</p>
+      </div>
+      <div style="padding: 24px 32px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
+          <h3 class="section-title" style="margin:0;">Daftar Siswa</h3>
+          <button class="btn btn-primary" onclick="openTambahSiswa()">➕ Tambah Siswa</button>
+        </div>
+        <div id="tabelSiswaContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB LEGER -->
+  <div class="tab-content" id="tab-leger" style="display:none;">
+    <div class="input-container">
+      <div class="input-header">
+        <h2>📊 Leger Nilai Kelas 5A</h2>
+        <p>Semua nilai dalam satu tampilan</p>
+      </div>
+      <div id="legerContent" style="padding: 24px 32px;"></div>
+    </div>
+  </div>
+
+  <!-- TAB DASHBOARD -->
+  <div class="tab-content" id="tab-dashboard" style="display:none;">
+    <div class="input-container">
+      <div class="input-header">
+        <h2>📈 Dashboard Statistik</h2>
+        <p>Visualisasi data kelas 5A</p>
+      </div>
+      <div id="dashboardContent" style="padding: 24px 32px;"></div>
+    </div>
+  </div>
+
+  <!-- TAB PENGATURAN -->
+  <div class="tab-content" id="tab-pengaturan" style="display:none;">
+    <div class="input-container">
+      <div class="input-header">
+        <h2>⚙️ Pengaturan</h2>
+        <p>Kelola data dan sistem</p>
+      </div>
+      <div style="padding: 24px 32px;">
+        <div class="pengaturan-card">
+          <h3>📅 Semester Aktif</h3>
+          <p>Pilih semester yang sedang berjalan</p>
+          <div class="pengaturan-actions">
+            <button class="btn btn-outline" id="btnSmt1" onclick="gantiSemester(1)">Semester 1</button>
+            <button class="btn btn-outline" id="btnSmt2" onclick="gantiSemester(2)">Semester 2</button>
+          </div>
+        </div>
+
+        <div class="pengaturan-card">
+          <h3>🔐 Ganti Password Guru</h3>
+          <p>Password default: guru2025</p>
+          <div class="form-row">
+            <div class="form-group"><label>Password Lama</label><input type="password" id="passLama"></div>
+            <div class="form-group"><label>Password Baru</label><input type="password" id="passBaru"></div>
+          </div>
+          <button class="btn btn-primary" onclick="gantiPassword()">💾 Ganti Password</button>
+        </div>
+
+        <div class="pengaturan-card">
+          <h3>🎯 Ubah KKTP per Mapel</h3>
+          <p>KKTP = Kriteria Ketercapaian Tujuan Pembelajaran</p>
+          <div id="formKKTP"></div>
+          <button class="btn btn-primary" style="margin-top: 12px;" onclick="simpanKKTP()">💾 Simpan KKTP</button>
+        </div>
+
+        <div class="pengaturan-card">
+          <h3>⚖️ Ubah Bobot Penilaian</h3>
+          <p>Total bobot harus 100%</p>
+          <div id="formBobot"></div>
+          <button class="btn btn-primary" style="margin-top: 12px;" onclick="simpanBobot()">💾 Simpan Bobot</button>
+        </div>
+
+        <div class="pengaturan-card">
+          <h3>💾 Manajemen Data</h3>
+          <p>Backup rutin dianjurkan</p>
+          <div class="pengaturan-actions">
+            <button class="btn btn-primary" onclick="exportData()">📥 Export JSON</button>
+            <button class="btn btn-outline" onclick="document.getElementById('importFile').click()">📤 Import</button>
+            <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importData(event)">
+            <button class="btn btn-danger" onclick="resetAllData()">🗑️ Reset Semua</button>
+          </div>
+        </div>
+
+        <div class="pengaturan-card">
+          <h3>📈 Informasi Data</h3>
+          <div id="dataInfo"></div>
+        </div>
+
+        <div class="pengaturan-card">
+          <h3>📜 Riwayat Input Terakhir</h3>
+          <div id="riwayatContent"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL TAMBAH SISWA -->
+  <div class="modal-overlay" id="modalTambahSiswa" style="display:none;" onclick="closeModal(event, 'modalTambahSiswa')">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header"><h3>➕ Tambah Siswa Baru</h3><button class="modal-close" onclick="closeModal(null, 'modalTambahSiswa')">✕</button></div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group"><label>NIS</label><input type="text" id="addNis"></div>
+          <div class="form-group"><label>NISN</label><input type="text" id="addNisn"></div>
+        </div>
+        <div class="form-group"><label>Nama Siswa</label><input type="text" id="addNama"></div>
+        <div class="form-row">
+          <div class="form-group"><label>L/P</label><select id="addLp"><option value="L">L</option><option value="P">P</option></select></div>
+          <div class="form-group"><label>Nama Orang Tua</label><input type="text" id="addOrtu"></div>
+        </div>
+        <div class="form-actions"><button class="btn btn-primary btn-lg" onclick="simpanTambahSiswa()">💾 Simpan</button><button class="btn btn-outline btn-lg" onclick="closeModal(null, 'modalTambahSiswa')">❌ Batal</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDIT SISWA -->
+  <div class="modal-overlay" id="modalEditSiswa" style="display:none;" onclick="closeModal(event, 'modalEditSiswa')">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header"><h3>✏️ Edit Data Siswa</h3><button class="modal-close" onclick="closeModal(null, 'modalEditSiswa')">✕</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="editNisLama">
+        <div class="form-row">
+          <div class="form-group"><label>NIS</label><input type="text" id="editNis"></div>
+          <div class="form-group"><label>NISN</label><input type="text" id="editNisn"></div>
+        </div>
+        <div class="form-group"><label>Nama Siswa</label><input type="text" id="editNama"></div>
+        <div class="form-row">
+          <div class="form-group"><label>L/P</label><select id="editLp"><option value="L">L</option><option value="P">P</option></select></div>
+          <div class="form-group"><label>Nama Orang Tua</label><input type="text" id="editOrtu"></div>
+        </div>
+        <div class="form-actions"><button class="btn btn-primary btn-lg" onclick="simpanEditSiswa()">💾 Simpan</button><button class="btn btn-outline btn-lg" onclick="closeModal(null, 'modalEditSiswa')">❌ Batal</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL HAPUS SISWA -->
+  <div class="modal-overlay" id="modalHapusSiswa" style="display:none;" onclick="closeModal(event, 'modalHapusSiswa')">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width: 440px;">
+      <div class="modal-header" style="background: var(--danger-light);"><h3 style="color: var(--danger);">⚠️ Konfirmasi Hapus</h3><button class="modal-close" onclick="closeModal(null, 'modalHapusSiswa')">✕</button></div>
+      <div class="modal-body">
+        <p style="margin-bottom: 12px;">Yakin hapus siswa berikut?</p>
+        <p style="font-weight: 700; font-size: 16px; margin-bottom: 16px;" id="hapusNamaSiswa"></p>
+        <p style="font-size: 12.5px; color: var(--danger); background: var(--danger-light); padding: 10px 14px; border-radius: 8px;">⚠️ Semua nilai & kasus akan hilang permanen.</p>
+        <div class="form-actions" style="margin-top: 20px; padding-top: 16px;">
+          <button class="btn btn-danger btn-lg" onclick="konfirmasiHapusSiswa()">🗑️ Ya, Hapus</button>
+          <button class="btn btn-outline btn-lg" onclick="closeModal(null, 'modalHapusSiswa')">❌ Batal</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDIT KASUS -->
+  <div class="modal-overlay" id="modalEditKasus" style="display:none;" onclick="closeModal(event, 'modalEditKasus')">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header"><h3>✏️ Edit Kasus</h3><button class="modal-close" onclick="closeModal(null, 'modalEditKasus')">✕</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="editKasusId">
+        <div class="form-row">
+          <div class="form-group"><label>Tanggal</label><input type="date" id="editKasusTanggal"></div>
+          <div class="form-group"><label>Nama</label><input type="text" id="editKasusNama" disabled style="background: var(--gray-100);"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Jenis</label><select id="editKasusKode"></select></div>
+          <div class="form-group"><label>Mapel</label><select id="editKasusMapel"></select></div>
+        </div>
+        <div class="form-group"><label>Keterangan</label><input type="text" id="editKasusKet"></div>
+        <div class="form-actions"><button class="btn btn-primary btn-lg" onclick="simpanEditKasus()">💾 Simpan</button><button class="btn btn-outline btn-lg" onclick="closeModal(null, 'modalEditKasus')">❌ Batal</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CETAK BATCH -->
+  <div class="modal-overlay" id="modalCetakBatch" style="display:none;" onclick="closeModal(event, 'modalCetakBatch')">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width: 600px;">
+      <div class="modal-header"><h3>🖨️ Cetak Batch Rapor</h3><button class="modal-close" onclick="closeModal(null, 'modalCetakBatch')">✕</button></div>
+      <div class="modal-body">
+        <p style="margin-bottom: 16px; font-size: 13px; color: var(--gray-500);">Pilih siswa yang akan dicetak rapornya:</p>
+        <div style="display:flex; gap:8px; margin-bottom: 12px;">
+          <button class="btn btn-outline" style="background: var(--gray-100); color: var(--gray-700);" onclick="selectAllCetak(true)">Pilih Semua</button>
+          <button class="btn btn-outline" style="background: var(--gray-100); color: var(--gray-700);" onclick="selectAllCetak(false)">Hapus Pilihan</button>
+        </div>
+        <div id="cetakBatchList" style="max-height: 400px; overflow-y: auto; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); padding: 12px;"></div>
+        <div class="form-actions" style="margin-top: 20px; padding-top: 16px;">
+          <button class="btn btn-primary btn-lg" onclick="cetakBatch()">🖨️ Cetak Sekarang</button>
+          <button class="btn btn-outline btn-lg" onclick="closeModal(null, 'modalCetakBatch')">❌ Batal</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
