@@ -1,4 +1,4 @@
-// ============ DATA SISWA ============
+// ============ DATA ============
 const DEFAULT_STUDENTS = [
   { nis: "001", nisn: "0123456789", nama: "Adi Saputra", lp: "L", ortu: "Bpk. Sutrisno" },
   { nis: "002", nisn: "0123456790", nama: "Ani Saputri", lp: "P", ortu: "Bpk. Santoso" },
@@ -126,9 +126,10 @@ const KOMPONEN_LIST = [
 ];
 
 const DEFAULT_BOBOT = { TH: 0.20, PR: 0.10, KUI: 0.15, PRA: 0.15, SIK: 0.10, BIC: 0.10, MAJ: 0.10, PRE: 0.10 };
-// Bobot Ujian: Harian 50% + MID 20% + UAS 30%
-const BOBOT_UJIAN = { HARIAN: 0.5, MID: 0.2, UAS: 0.3 };
 const DEFAULT_KKTP = { PAI: 75, PP: 75, BIN: 75, MTK: 75, IPAS: 75, BIG: 70, PJOK: 75, SMUS: 75, KKA: 75, TAHF: 75 };
+
+// Bobot Ujian: Harian 50%, MID 20%, UAS 30%
+const BOBOT_UJIAN = { HARIAN: 0.5, MID: 0.2, UAS: 0.3 };
 
 const JENIS_KASUS = [
   { kode: "K01", nama: "Tidak mengerjakan PR", poin: -5, target: "mapel" },
@@ -173,6 +174,10 @@ function loadData() {
     try {
       const data = JSON.parse(saved);
       if (data.students) students = data.students;
+      if (!data.nilaiData) data.nilaiData = {};
+      if (!data.kasus) data.kasus = [];
+      if (!data.reward) data.reward = [];
+      if (!data.riwayat) data.riwayat = [];
       return data;
     } catch (e) { console.error(e); }
   }
@@ -196,6 +201,27 @@ function hitungRataRata(nilai) {
 function getPredikat(nilai) { return nilai >= 90 ? "A" : nilai >= 80 ? "B" : nilai >= 70 ? "C" : "D"; }
 function getPredikatClass(nilai) { return nilai >= 90 ? "a" : nilai >= 80 ? "b" : nilai >= 70 ? "c" : "d"; }
 function fmt(n) { return n === null || n === undefined || isNaN(n) ? "-" : n; }
+
+function getNilaiAkhirMapel(nis, mapel) {
+  const nilaiHarian = nilaiData[nis]?.[mapel] || 0;
+  const ujian = nilaiData[nis]?.UJIAN?.[mapel] || {};
+  const smt = SEMESTER_AKTIF;
+  const mid = smt === 1 ? ujian.MID1 : ujian.MID2;
+  const uas = smt === 1 ? ujian.UAS1 : ujian.UAS2;
+
+  if (!mid && !uas) return nilaiHarian;
+  if (!nilaiHarian && (mid || uas)) {
+    let total = 0, bobot = 0;
+    if (mid) { total += mid * BOBOT_UJIAN.MID; bobot += BOBOT_UJIAN.MID; }
+    if (uas) { total += uas * BOBOT_UJIAN.UAS; bobot += BOBOT_UJIAN.UAS; }
+    return bobot > 0 ? Math.round(total / bobot) : 0;
+  }
+  let total = nilaiHarian * BOBOT_UJIAN.HARIAN;
+  let bobot = BOBOT_UJIAN.HARIAN;
+  if (mid) { total += mid * BOBOT_UJIAN.MID; bobot += BOBOT_UJIAN.MID; }
+  if (uas) { total += uas * BOBOT_UJIAN.UAS; bobot += BOBOT_UJIAN.UAS; }
+  return Math.round(total / bobot);
+}
 
 function getKasusSiswa(nis) {
   const list = (appData.kasus || []).filter(k => k.nis === nis);
@@ -239,57 +265,22 @@ function getStatusKedisiplinan(nis) {
   if (netto > -10) return { label: "⚠️ Perlu Perhatian", kelas: "perhatian" };
   return { label: "🚨 Perlu Bimbingan", kelas: "berat" };
 }
-// Hitung nilai akhir mapel (Harian + Ujian)
-function getNilaiAkhirMapel(nis, mapel) {
-  const nilaiHarian = nilaiData[nis]?.[mapel] || 0;
-  const ujian = nilaiData[nis]?.UJIAN?.[mapel] || {};
-  const smt = SEMESTER_AKTIF;
-  const mid = smt === 1 ? ujian.MID1 : ujian.MID2;
-  const uas = smt === 1 ? ujian.UAS1 : ujian.UAS2;
 
-  // Kalau belum ada ujian, pakai harian saja
-  if (!mid && !uas) return nilaiHarian;
-  if (!nilaiHarian && (mid || uas)) {
-    // Ada ujian tapi belum ada harian → pakai ujian saja
-    let total = 0, bobot = 0;
-    if (mid) { total += mid * BOBOT_UJIAN.MID; bobot += BOBOT_UJIAN.MID; }
-    if (uas) { total += uas * BOBOT_UJIAN.UAS; bobot += BOBOT_UJIAN.UAS; }
-    return bobot > 0 ? Math.round(total / bobot) : 0;
-  }
-
-  // Keduanya ada → hitung dengan bobot
-  let total = nilaiHarian * BOBOT_UJIAN.HARIAN;
-  let bobot = BOBOT_UJIAN.HARIAN;
-  if (mid) { total += mid * BOBOT_UJIAN.MID; bobot += BOBOT_UJIAN.MID; }
-  if (uas) { total += uas * BOBOT_UJIAN.UAS; bobot += BOBOT_UJIAN.UAS; }
-  return Math.round(total / bobot);
-}
 function getRanking() {
   return students.map(s => {
-    const n = nilaiData[s.nis] || {};
-    // Ambil nilai harian (bukan _TP atau _BAB atau UJIAN)
-    const harianOnly = {};
-    Object.entries(n).forEach(([k, v]) => {
-      if (!k.includes("_") && k !== "UJIAN" && typeof v === "number") harianOnly[k] = v;
-    });
-    
-    // Hitung nilai akhir per mapel (Harian + Ujian)
     const nilaiAkhir = {};
     mapelList.forEach(m => {
       const na = getNilaiAkhirMapel(s.nis, m.kode);
       if (na > 0) nilaiAkhir[m.kode] = na;
     });
-    
     const rataAsli = hitungRataRata(nilaiAkhir);
     const k = getKasusSiswa(s.nis);
     const r = getRewardSiswa(s.nis);
     const netto = k.poinGlobal + r.poinGlobal;
     const rataAkhir = Math.max(75, Math.min(100, rataAsli + netto));
-    
     return {
       ...s,
-      nilai: nilaiAkhir,       // nilai akhir (dengan ujian)
-      nilaiHarian: harianOnly,  // nilai harian (tanpa ujian)
+      nilai: nilaiAkhir,
       rata: rataAkhir,
       rataAsli,
       totalPoinKasus: k.totalPoin,
@@ -299,6 +290,7 @@ function getRanking() {
     };
   }).sort((a, b) => b.rata - a.rata);
 }
+
 function showToast(msg, type = "success") {
   const t = document.getElementById("toast");
   if (!t) return;
@@ -326,7 +318,7 @@ function doLogin() {
 }
 
 function logout() {
-  if (!confirm("Keluar dari aplikasi?")) return;
+  if (!confirm("Keluar?")) return;
   sessionStorage.removeItem("loggedIn");
   location.reload();
 }
@@ -335,12 +327,12 @@ function gantiPassword() {
   const lama = document.getElementById("passLama").value;
   const baru = document.getElementById("passBaru").value;
   if (lama !== (appData.password || DEFAULT_PASSWORD)) return showToast("Password lama salah!", "error");
-  if (baru.length < 4) return showToast("Password minimal 4 karakter!", "error");
+  if (baru.length < 4) return showToast("Minimal 4 karakter!", "error");
   appData.password = baru;
   saveData();
   document.getElementById("passLama").value = "";
   document.getElementById("passBaru").value = "";
-  showToast("✅ Password berhasil diubah!", "success");
+  showToast("✅ Password diubah!", "success");
 }
 
 // ============ TABS ============
@@ -348,14 +340,15 @@ function switchTab(tab, btn) {
   document.querySelectorAll(".nav-tab").forEach(b => b.classList.remove("active"));
   if (btn) btn.classList.add("active");
 
-  ["rapor", "input", "kasus", "reward", "siswa", "leger", "dashboard", "pengaturan"].forEach(t => {
+  ["rapor", "input", "ujian", "kasus", "reward", "siswa", "leger", "dashboard", "pengaturan"].forEach(t => {
     const el = document.getElementById("tab-" + t);
     if (!el) return;
     if (t === "rapor") el.style.display = (tab === "rapor") ? "grid" : "none";
     else el.style.display = (tab === t) ? "block" : "none";
   });
 
-  if (tab === "input") { populateInputSelects(); }
+  if (tab === "input") populateInputSelects();
+  if (tab === "ujian") { populateUjianSelects(); renderUjianTable(); }
   if (tab === "kasus") { populateKasusSelects(); renderRekapKasus(); renderLogKasus(); }
   if (tab === "reward") { populateRewardSelects(); renderRekapReward(); renderLogReward(); }
   if (tab === "siswa") renderTabelSiswa();
@@ -371,7 +364,6 @@ function renderStudentList() {
   const ranking = getRanking();
   list.innerHTML = "";
   if (!ranking.length) { list.innerHTML = `<li style="padding:20px;text-align:center;color:var(--gray-500);font-size:13px;">Belum ada siswa.</li>`; return; }
-
   ranking.forEach((s, idx) => {
     const rank = idx + 1;
     let rc = "rank-badge";
@@ -379,7 +371,6 @@ function renderStudentList() {
     else if (rank === 2) rc += " rank-2";
     else if (rank === 3) rc += " rank-3";
     else if (rank <= 5) rc += " rank-top";
-
     const li = document.createElement("li");
     li.className = "student-item";
     li.dataset.nis = s.nis;
@@ -410,28 +401,19 @@ function renderTabelSiswa() {
   if (!el) return;
   const sorted = [...students].sort((a, b) => a.nama.localeCompare(b.nama));
   el.innerHTML = `
-    <div class="siswa-table-wrapper">
-      <table class="siswa-table">
-        <thead><tr>
-          <th>No</th><th>NIS</th><th>NISN</th><th>Nama</th><th>L/P</th><th>Orang Tua</th><th>Aksi</th>
-        </tr></thead>
-        <tbody>
-          ${sorted.map((s, i) => `
-            <tr>
-              <td>${i + 1}</td>
-              <td>${s.nis}</td>
-              <td>${s.nisn}</td>
-              <td style="font-weight:600;">${s.nama}</td>
-              <td>${s.lp}</td>
-              <td>${s.ortu}</td>
-              <td>
-                <button class="student-action-btn edit" style="opacity:1;" onclick="openEditSiswa('${s.nis}')">✏️</button>
-                <button class="student-action-btn delete" style="opacity:1;" onclick="openHapusSiswa('${s.nis}')">🗑️</button>
-              </td>
-            </tr>`).join("")}
-        </tbody>
-      </table>
-    </div>`;
+    <div class="siswa-table-wrapper"><table class="siswa-table">
+      <thead><tr><th>No</th><th>NIS</th><th>NISN</th><th>Nama</th><th>L/P</th><th>Orang Tua</th><th>Aksi</th></tr></thead>
+      <tbody>
+        ${sorted.map((s, i) => `<tr>
+          <td>${i + 1}</td><td>${s.nis}</td><td>${s.nisn}</td>
+          <td style="font-weight:600;">${s.nama}</td><td>${s.lp}</td><td>${s.ortu}</td>
+          <td>
+            <button class="student-action-btn edit" style="opacity:1;" onclick="openEditSiswa('${s.nis}')">✏️</button>
+            <button class="student-action-btn delete" style="opacity:1;" onclick="openHapusSiswa('${s.nis}')">🗑️</button>
+          </td>
+        </tr>`).join("")}
+      </tbody>
+    </table></div>`;
 }
 
 function openTambahSiswa() {
@@ -451,6 +433,7 @@ function simpanTambahSiswa() {
   students.push({ nis, nisn, nama, lp, ortu });
   saveData();
   renderStudentList(); renderTabelSiswa();
+  populateInputSelects(); populateUjianSelects(); populateKasusSelects(); populateRewardSelects();
   closeModal(null, "modalTambahSiswa");
   showToast(`✅ Siswa ${nama} ditambahkan!`, "success");
 }
@@ -471,7 +454,7 @@ function simpanEditSiswa() {
   const nisLama = document.getElementById("editNisLama").value;
   const nisBaru = document.getElementById("editNis").value.trim();
   const nama = document.getElementById("editNama").value.trim();
-  if (!nisBaru || !nama) return showToast("NIS dan Nama wajib diisi!", "error");
+  if (!nisBaru || !nama) return showToast("NIS dan Nama wajib!", "error");
   if (nisBaru !== nisLama && students.some(s => s.nis === nisBaru)) return showToast("NIS sudah digunakan!", "error");
   const idx = students.findIndex(s => s.nis === nisLama);
   if (idx === -1) return;
@@ -483,6 +466,7 @@ function simpanEditSiswa() {
   }
   saveData();
   renderStudentList(); renderTabelSiswa();
+  populateInputSelects(); populateUjianSelects(); populateKasusSelects(); populateRewardSelects();
   closeModal(null, "modalEditSiswa");
   showToast(`✅ Data diubah!`, "success");
 }
@@ -506,8 +490,9 @@ function konfirmasiHapusSiswa() {
   appData.reward = (appData.reward || []).filter(r => r.nis !== hapusNisTarget);
   saveData();
   renderStudentList(); renderTabelSiswa();
+  populateInputSelects(); populateUjianSelects(); populateKasusSelects(); populateRewardSelects();
   const main = document.getElementById("raporView");
-  if (main) main.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><h2>Pilih Siswa</h2><p>Klik nama siswa di panel kiri</p></div>`;
+  if (main) main.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><h2>Pilih Siswa</h2></div>`;
   closeModal(null, "modalHapusSiswa");
   showToast(`🗑️ ${nama} dihapus`, "info");
   hapusNisTarget = null;
@@ -527,7 +512,7 @@ function getTingkat(nis) {
 function getMapelLemah(nis, jumlah = 2) {
   const n = nilaiData[nis] || {};
   const only = {};
-  Object.entries(n).forEach(([k, v]) => { if (!k.includes("_") && typeof v === "number") only[k] = v; });
+  Object.entries(n).forEach(([k, v]) => { if (!k.includes("_") && k !== "UJIAN" && typeof v === "number") only[k] = v; });
   return Object.entries(only).sort((a, b) => a[1] - b[1]).slice(0, jumlah).map(([kode, val]) => ({
     nama: mapelList.find(m => m.kode === kode)?.nama || kode, nilai: val
   }));
@@ -579,14 +564,14 @@ function generateSaran(nis, nama) {
   const m1 = ml[0]?.nama || "";
   const m2 = ml[1]?.nama || "";
   const SS = {
-    TINGGI: [`${nama}, kamu menunjukkan prestasi yang luar biasa! Pertahankan semangat belajar.`, `Luar biasa, ${nama}! Kamu mencapai hasil terbaik di kelas.`, `${nama}, prestasimu sangat membanggakan!`],
+    TINGGI: [`${nama}, prestasi yang luar biasa! Pertahankan semangat belajar.`, `Luar biasa, ${nama}! Kamu mencapai hasil terbaik di kelas.`, `${nama}, prestasimu sangat membanggakan!`],
     SEDANG: [`${nama}, hasil belajarmu sudah baik. Tingkatkan dengan fokus pada ${m1}.`, `Bagus, ${nama}! Lebih aktif bertanya di kelas ya.`, `Kamu di jalur yang tepat, ${nama}! Fokus pada ${m1} dan ${m2}.`],
-    RENDAH: [`${nama}, jangan berkecil hati. Ayo fokus pada ${m1} dan ${m2}.`, `${nama}, kita perbaiki bersama ya. Minta bantuan guru jika sulit.`, `Kamu anak hebat, ${nama}! Nilai bisa ditingkatkan dengan usaha.`]
+    RENDAH: [`${nama}, jangan berkecil hati. Ayo fokus pada ${m1} dan ${m2}.`, `${nama}, kita perbaiki bersama ya.`, `Kamu anak hebat, ${nama}! Nilai bisa ditingkatkan dengan usaha.`]
   };
   const SO = {
-    TINGGI: [`Ananda ${nama} menunjukkan prestasi akademik yang sangat membanggakan. Mohon terus didampingi.`, `Kami bersyukur atas prestasi ${nama}. Terima kasih atas kerja sama Bapak/Ibu.`, `${nama} memiliki potensi luar biasa. Pertimbangkan kegiatan pengayaan.`],
-    SEDANG: [`Ananda ${nama} sudah menunjukkan perkembangan baik. Dampingi fokus pada ${m1}.`, `Kami apresiasi kemajuan ${nama}. Sediakan waktu belajar rutin di rumah.`, `${nama} berpotensi. Komunikasi dengan guru ${m1} untuk tips belajar.`],
-    RENDAH: [`Ananda ${nama} perlu bimbingan intensif pada ${m1} dan ${m2}.`, `Ananda ${nama} perlu penguatan pada ${m1} dan ${m2}. Pertimbangkan les tambahan.`, `Mari dampingi ${nama} dengan sabar. Fokus utama: ${m1}.`]
+    TINGGI: [`Ananda ${nama} menunjukkan prestasi akademik yang sangat membanggakan.`, `Kami bersyukur atas prestasi ${nama}. Terima kasih atas kerja sama Bapak/Ibu.`, `${nama} memiliki potensi luar biasa. Pertimbangkan kegiatan pengayaan.`],
+    SEDANG: [`Ananda ${nama} sudah menunjukkan perkembangan baik. Dampingi fokus pada ${m1}.`, `Kami apresiasi kemajuan ${nama}. Sediakan waktu belajar rutin.`, `${nama} berpotensi. Komunikasi dengan guru ${m1}.`],
+    RENDAH: [`Ananda ${nama} perlu bimbingan intensif pada ${m1} dan ${m2}.`, `Ananda ${nama} perlu penguatan pada ${m1} dan ${m2}.`, `Mari dampingi ${nama} dengan sabar. Fokus: ${m1}.`]
   };
   const pilih = a => a[Math.floor(Math.random() * a.length)];
   return { tingkat, saranSiswa: pilih(SS[tingkat]), saranOrtu: pilih(SO[tingkat]), mapelLemah: ml };
@@ -597,10 +582,14 @@ function showRapor(nis) {
   document.querySelector(`.student-item[data-nis="${nis}"]`)?.classList.add("active");
   const siswa = students.find(s => s.nis === nis);
   if (!siswa) return;
-  const n = nilaiData[nis] || {};
-  const only = {};
-  Object.entries(n).forEach(([k, v]) => { if (!k.includes("_") && typeof v === "number") only[k] = v; });
-  const rataAsli = hitungRataRata(only);
+
+  const nilaiAkhir = {};
+  mapelList.forEach(m => {
+    const na = getNilaiAkhirMapel(nis, m.kode);
+    if (na > 0) nilaiAkhir[m.kode] = na;
+  });
+
+  const rataAsli = hitungRataRata(nilaiAkhir);
   const kasus = getKasusSiswa(nis);
   const reward = getRewardSiswa(nis);
   const netto = kasus.poinGlobal + reward.poinGlobal;
@@ -610,8 +599,16 @@ function showRapor(nis) {
   const rank = ranking.findIndex(s => s.nis === nis) + 1;
   const { tingkat, saranSiswa, saranOrtu, mapelLemah } = generateSaran(nis, siswa.nama);
   const statusDisiplin = getStatusKedisiplinan(nis);
-  const ekskul = [{ nama: "Pramuka", nilai: "A", ket: "Aktif dan disiplin" }, { nama: "Tahfidz", nilai: "A", ket: "Hafalan lancar" }];
-  const kokurikuler = { proyek: "Kearifan Lokal", predikat: tingkat === "TINGGI" ? "Sangat Berkembang" : "Berkembang", deskripsi: `${siswa.nama} menunjukkan kemampuan bergotong royong dan kreatif.` };
+
+  const ekskul = [
+    { nama: "Pramuka", nilai: "A", ket: "Aktif dan disiplin" },
+    { nama: "Tahfidz", nilai: "A", ket: "Hafalan lancar" }
+  ];
+  const kokurikuler = {
+    proyek: "Kearifan Lokal",
+    predikat: tingkat === "TINGGI" ? "Sangat Berkembang" : "Berkembang",
+    deskripsi: `${siswa.nama} menunjukkan kemampuan bergotong royong dan kreatif.`
+  };
 
   let totalTP = 0, tercapaiTP = 0, belumTP = 0;
   mapelList.forEach(m => {
@@ -635,12 +632,12 @@ function showRapor(nis) {
       </div>
 
       <div class="tp-stats">
-        <div class="tp-stat-item"><div class="tp-stat-label">Total TP Dinilai</div><div class="tp-stat-value">${totalTP}</div></div>
-        <div class="tp-stat-item success"><div class="tp-stat-label">✓ Tujuan Tercapai</div><div class="tp-stat-value">${tercapaiTP}</div></div>
+        <div class="tp-stat-item"><div class="tp-stat-label">Total TP</div><div class="tp-stat-value">${totalTP}</div></div>
+        <div class="tp-stat-item success"><div class="tp-stat-label">✓ Tercapai</div><div class="tp-stat-value">${tercapaiTP}</div></div>
         <div class="tp-stat-item warning"><div class="tp-stat-label">⚠ Perlu Peningkatan</div><div class="tp-stat-value">${belumTP}</div></div>
       </div>
 
-      <div style="padding: 20px 32px;">
+      <div style="padding:20px 32px;">
         <div class="kasus-info-box ${netto < 0 ? 'ada-kasus' : 'aman'}">
           <div>
             <div class="kasus-info-label">📋 Kedisiplinan & Prestasi</div>
@@ -659,7 +656,9 @@ function showRapor(nis) {
         <h3 class="section-title">Nilai Akademik & Capaian Kompetensi</h3>
         ${mapelList.map((m, i) => {
           const detail = getDetailMapel(nis, m.kode);
-          const nilaiMapel = only[m.kode];
+          const nilaiMapel = nilaiAkhir[m.kode];
+          const nilaiHarian = nilaiData[nis]?.[m.kode];
+          const ujian = nilaiData[nis]?.UJIAN?.[m.kode] || {};
           const deskripsi = generateDeskripsiMapel(nis, m.kode);
           const adaNilai = detail.some(b => b.tp.some(t => t.nilai !== null));
           return `
@@ -669,13 +668,20 @@ function showRapor(nis) {
                   <div class="mapel-detail-no">${i + 1}</div>
                   <div>
                     <div class="mapel-detail-nama">${m.nama}</div>
-                    <div class="mapel-detail-capaian">${adaNilai ? 'Klik untuk detail TP ▾' : 'Belum ada nilai'}</div>
+                    <div class="mapel-detail-capaian">${adaNilai ? 'Klik untuk detail ▾' : 'Belum ada nilai'}</div>
                   </div>
                 </div>
                 <div class="mapel-detail-right">
                   <div class="mapel-detail-nilai">${fmt(nilaiMapel)}</div>
                   <span class="predikat predikat-${getPredikat(nilaiMapel || 0)}">${getPredikat(nilaiMapel || 0)}</span>
                 </div>
+              </div>
+              <div class="ujian-info-row">
+                <div><b>Harian:</b> <span style="font-family:'Poppins';font-weight:800;color:var(--primary);font-size:14px;">${fmt(nilaiHarian)}</span></div>
+                <div><b>MID S1:</b> ${fmt(ujian.MID1)}</div>
+                <div><b>UAS S1:</b> ${fmt(ujian.UAS1)}</div>
+                <div><b>MID S2:</b> ${fmt(ujian.MID2)}</div>
+                <div><b>UAS S2:</b> ${fmt(ujian.UAS2)}</div>
               </div>
               <div class="mapel-detail-deskripsi"><b>Deskripsi:</b> ${deskripsi}</div>
               <div class="mapel-detail-body" id="detail-${i}" style="display:none;">
@@ -741,10 +747,13 @@ function toggleMapelDetail(i) {
 // ============ INPUT NILAI ============
 function populateInputSelects() {
   const ss = document.getElementById("inputSiswa");
-  if (ss && ss.options.length <= 1) {
+  if (ss) {
+    const cur = ss.value;
+    ss.innerHTML = '<option value="">-- Pilih Siswa --</option>';
     [...students].sort((a, b) => a.nama.localeCompare(b.nama)).forEach(s => {
       const o = document.createElement("option"); o.value = s.nis; o.textContent = `${s.nis} — ${s.nama}`; ss.appendChild(o);
     });
+    ss.value = cur;
   }
   const ms = document.getElementById("inputMapel");
   if (ms && ms.options.length <= 1) {
@@ -786,7 +795,7 @@ function renderTPTable() {
     const key = tp.split(":")[0].trim();
     const desc = tp.split(":").slice(1).join(":").trim();
     const s = saved[key] || {};
-    html += `<tr data-tp-key="${key}">
+    html += `<tr>
       <td class="tp-col-no"><div>${idx + 1}</div></td>
       <td class="tp-col-tp"><div class="tp-kode-badge">${key}</div><div class="tp-deskripsi-input">${desc}</div></td>
       ${KOMPONEN_LIST.map(k => {
@@ -869,19 +878,121 @@ function simpanSemuaNilai() {
 }
 
 function resetTPTable() {
-  if (!confirm("Reset nilai di tabel? (Belum disimpan)")) return;
+  if (!confirm("Reset nilai di tabel?")) return;
   document.querySelectorAll(".tp-input").forEach(i => { i.value = ""; i.classList.remove("filled"); });
   document.querySelectorAll(".tp-nilai-akhir").forEach(e => { e.textContent = "-"; e.style.background = ""; e.style.color = ""; });
   document.querySelectorAll(".tp-status-badge").forEach(e => { e.textContent = "—"; e.className = "tp-status-badge"; });
 }
 
+// ============ UJIAN ============
+function populateUjianSelects() {
+  const ms = document.getElementById("ujianMapel");
+  if (ms && ms.options.length <= 1) {
+    mapelList.forEach(m => { const o = document.createElement("option"); o.value = m.kode; o.textContent = m.nama; ms.appendChild(o); });
+  }
+}
+
+function renderUjianTable() {
+  const mapel = document.getElementById("ujianMapel").value;
+  const container = document.getElementById("ujianTableContainer");
+  const empty = document.getElementById("emptyUjian");
+  const table = document.getElementById("ujianTable");
+  if (!mapel) { container.style.display = "none"; empty.style.display = "block"; return; }
+
+  const sorted = [...students].sort((a, b) => a.nama.localeCompare(b.nama));
+  let html = `<thead><tr>
+    <th class="tp-col-no">No</th>
+    <th class="tp-col-tp" style="text-align:left;">Nama Siswa</th>
+    <th class="tp-col-nilai">MID S1</th>
+    <th class="tp-col-nilai">UAS S1</th>
+    <th class="tp-col-nilai">MID S2</th>
+    <th class="tp-col-nilai">UAS S2</th>
+    <th class="tp-col-akhir">Rata Ujian</th>
+  </tr></thead><tbody>`;
+
+  sorted.forEach((s, idx) => {
+    const u = nilaiData[s.nis]?.UJIAN?.[mapel] || {};
+    html += `<tr>
+      <td class="tp-col-no"><div>${idx + 1}</div></td>
+      <td class="tp-col-tp" style="text-align:left;">
+        <div style="font-weight:600;">${s.nama}</div>
+        <div style="font-size:11px;color:var(--gray-500);">NIS: ${s.nis}</div>
+      </td>
+      <td><input type="number" class="tp-input ${u.MID1 ? 'filled' : ''}" min="0" max="100" placeholder="-" data-nis="${s.nis}" data-mapel="${mapel}" data-jenis="MID1" value="${u.MID1 || ''}" oninput="hitungRataUjian('${s.nis}','${mapel}')"></td>
+      <td><input type="number" class="tp-input ${u.UAS1 ? 'filled' : ''}" min="0" max="100" placeholder="-" data-nis="${s.nis}" data-mapel="${mapel}" data-jenis="UAS1" value="${u.UAS1 || ''}" oninput="hitungRataUjian('${s.nis}','${mapel}')"></td>
+      <td><input type="number" class="tp-input ${u.MID2 ? 'filled' : ''}" min="0" max="100" placeholder="-" data-nis="${s.nis}" data-mapel="${mapel}" data-jenis="MID2" value="${u.MID2 || ''}" oninput="hitungRataUjian('${s.nis}','${mapel}')"></td>
+      <td><input type="number" class="tp-input ${u.UAS2 ? 'filled' : ''}" min="0" max="100" placeholder="-" data-nis="${s.nis}" data-mapel="${mapel}" data-jenis="UAS2" value="${u.UAS2 || ''}" oninput="hitungRataUjian('${s.nis}','${mapel}')"></td>
+      <td><span class="tp-nilai-akhir" id="ujian-avg-${s.nis}">-</span></td>
+    </tr>`;
+  });
+  html += `</tbody>`;
+  table.innerHTML = html;
+  container.style.display = "block";
+  empty.style.display = "none";
+  sorted.forEach(s => hitungRataUjian(s.nis, mapel));
+}
+
+function hitungRataUjian(nis, mapel) {
+  const inputs = document.querySelectorAll(`input[data-nis="${nis}"][data-mapel="${mapel}"]`);
+  let total = 0, count = 0;
+  inputs.forEach(inp => {
+    const v = parseFloat(inp.value);
+    if (!isNaN(v)) { total += v; count++; inp.classList.add("filled"); }
+    else inp.classList.remove("filled");
+  });
+  const el = document.getElementById("ujian-avg-" + nis);
+  if (el) {
+    if (count > 0) {
+      const avg = Math.round(total / count);
+      el.textContent = avg;
+      el.style.background = avg >= 90 ? "#dcfce7" : avg >= 80 ? "#dbeafe" : avg >= 70 ? "#fef3c7" : "#fee2e2";
+      el.style.color = avg >= 90 ? "#16a34a" : avg >= 80 ? "#2563eb" : avg >= 70 ? "#f59e0b" : "#dc2626";
+    } else {
+      el.textContent = "-"; el.style.background = ""; el.style.color = "";
+    }
+  }
+}
+
+function simpanSemuaUjian() {
+  const mapel = document.getElementById("ujianMapel").value;
+  if (!mapel) return showToast("Pilih mapel!", "error");
+  const inputs = document.querySelectorAll(`input[data-mapel="${mapel}"]`);
+  const byNis = {};
+  inputs.forEach(inp => {
+    const nis = inp.dataset.nis;
+    const jenis = inp.dataset.jenis;
+    const v = parseFloat(inp.value);
+    if (!byNis[nis]) byNis[nis] = {};
+    if (!isNaN(v)) byNis[nis][jenis] = v;
+  });
+  let count = 0;
+  Object.entries(byNis).forEach(([nis, ujian]) => {
+    if (!nilaiData[nis]) nilaiData[nis] = {};
+    if (!nilaiData[nis].UJIAN) nilaiData[nis].UJIAN = {};
+    if (Object.keys(ujian).length > 0) {
+      nilaiData[nis].UJIAN[mapel] = ujian;
+      count++;
+    }
+  });
+  if (!appData.riwayat) appData.riwayat = [];
+  const mn = mapelList.find(m => m.kode === mapel)?.nama || mapel;
+  appData.riwayat.unshift({ waktu: new Date().toISOString(), aksi: "input-ujian", detail: `Input ujian ${mn} untuk ${count} siswa` });
+  if (appData.riwayat.length > 100) appData.riwayat = appData.riwayat.slice(0, 100);
+  saveData();
+  renderStudentList();
+  showToast(`✅ Nilai ujian ${mn} disimpan!`, "success");
+}
+
 // ============ KASUS ============
 function populateKasusSelects() {
   const ss = document.getElementById("kasusSiswa");
-  if (ss && ss.options.length <= 1) {
+  if (ss) {
+    const cur = ss.value;
+    ss.innerHTML = '<option value="">-- Pilih Siswa --</option>';
     [...students].sort((a, b) => a.nama.localeCompare(b.nama)).forEach(s => {
       const o = document.createElement("option"); o.value = s.nis; o.textContent = `${s.nis} — ${s.nama}`; ss.appendChild(o);
     });
+    ss.value = cur;
   }
   const ks = document.getElementById("kasusKode");
   if (ks && ks.options.length <= 1) {
@@ -946,9 +1057,7 @@ function renderRekapKasus() {
     el.innerHTML = `<div style="padding:30px;text-align:center;background:var(--success-light);border-radius:12px;border:1.5px dashed var(--success);"><div style="font-size:40px;">🎉</div><div style="font-weight:700;color:var(--success);">Tidak Ada Pelanggaran!</div></div>`;
     return;
   }
-  el.innerHTML = `<table class="rekap-kasus-table"><thead><tr>
-    <th>Nama</th><th>Jml</th><th>Poin Global</th><th>Total</th><th>Status</th><th>Aksi</th>
-    </tr></thead><tbody>
+  el.innerHTML = `<table class="rekap-kasus-table"><thead><tr><th>Nama</th><th>Jml</th><th>Poin Global</th><th>Total</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
     ${data.map(d => `<tr>
       <td style="font-weight:600;">${d.nama}</td>
       <td>${d.jumlah}</td>
@@ -956,8 +1065,7 @@ function renderRekapKasus() {
       <td><span class="kasus-poin-badge ${d.totalPoin === 0 ? 'safe' : d.totalPoin > -10 ? 'warning' : ''}">${d.totalPoin}</span></td>
       <td><span class="kasus-status-pill ${d.status.kelas}">${d.status.label}</span></td>
       <td><button class="student-action-btn" style="opacity:1;" onclick="renderLogKasus('${d.nis}')">👁️</button></td>
-    </tr>`).join("")}
-  </tbody></table>`;
+    </tr>`).join("")}</tbody></table>`;
 }
 
 function renderLogKasus(filterNis = null) {
@@ -1032,10 +1140,13 @@ function hapusKasus(id) {
 // ============ REWARD ============
 function populateRewardSelects() {
   const ss = document.getElementById("rewardSiswa");
-  if (ss && ss.options.length <= 1) {
+  if (ss) {
+    const cur = ss.value;
+    ss.innerHTML = '<option value="">-- Pilih Siswa --</option>';
     [...students].sort((a, b) => a.nama.localeCompare(b.nama)).forEach(s => {
       const o = document.createElement("option"); o.value = s.nis; o.textContent = `${s.nis} — ${s.nama}`; ss.appendChild(o);
     });
+    ss.value = cur;
   }
   const rs = document.getElementById("rewardKode");
   if (rs && rs.options.length <= 1) {
@@ -1079,7 +1190,7 @@ function simpanReward() {
   saveData();
   renderRekapReward(); renderLogReward(); renderStudentList();
   resetFormReward();
-  showToast(`🏆 Reward dicatat (+${j.poin} poin)!`, "success");
+  showToast(`🏆 Reward dicatat (+${j.poin})!`, "success");
 }
 
 function resetFormReward() {
@@ -1099,16 +1210,13 @@ function renderRekapReward() {
     el.innerHTML = `<div style="padding:30px;text-align:center;background:var(--gray-50);border-radius:12px;border:1.5px dashed var(--gray-300);"><div style="font-size:40px;">🏆</div><div style="font-weight:700;color:var(--gray-500);">Belum ada reward</div></div>`;
     return;
   }
-  el.innerHTML = `<table class="rekap-kasus-table rekap-reward-table"><thead><tr>
-    <th>Nama</th><th>Jml</th><th>Total Poin</th><th>Aksi</th>
-    </tr></thead><tbody>
+  el.innerHTML = `<table class="rekap-kasus-table rekap-reward-table"><thead><tr><th>Nama</th><th>Jml</th><th>Total Poin</th><th>Aksi</th></tr></thead><tbody>
     ${data.map(d => `<tr>
       <td style="font-weight:600;">${d.nama}</td>
       <td>${d.jumlah}</td>
       <td><span class="reward-poin-badge">+${d.totalPoin}</span></td>
       <td><button class="student-action-btn" style="opacity:1;background:var(--success-light);color:var(--success);" onclick="renderLogReward('${d.nis}')">👁️</button></td>
-    </tr>`).join("")}
-  </tbody></table>`;
+    </tr>`).join("")}</tbody></table>`;
 }
 
 function renderLogReward(filterNis = null) {
@@ -1178,12 +1286,8 @@ function renderDashboard() {
   const rataKelas = ranking.length ? ranking.reduce((s, x) => s + x.rata, 0) / ranking.length : 0;
   const tertinggi = ranking[0]?.rata.toFixed(1) || "-";
   const terendah = ranking[ranking.length - 1]?.rata.toFixed(1) || "-";
-
-  // Distribusi predikat
   const dist = { A: 0, B: 0, C: 0, D: 0 };
   ranking.forEach(s => { dist[getPredikat(s.rata)]++; });
-
-  // Distribusi kasus
   let siswaAdaKasus = 0, siswaAdaReward = 0, totalKasus = 0, totalReward = 0;
   students.forEach(s => {
     const k = getKasusSiswa(s.nis);
@@ -1193,8 +1297,6 @@ function renderDashboard() {
     totalKasus += k.jumlahKasus;
     totalReward += r.jumlahReward;
   });
-
-  // Top 5
   const top5 = ranking.slice(0, 5);
 
   el.innerHTML = `
@@ -1208,7 +1310,6 @@ function renderDashboard() {
           <div class="stat-item yellow"><div class="stat-label">Terendah</div><div class="stat-value">${terendah}</div></div>
         </div>
       </div>
-
       <div class="dashboard-card">
         <h4>🎯 Distribusi Predikat</h4>
         <div class="bar-chart">
@@ -1218,7 +1319,6 @@ function renderDashboard() {
           <div class="bar-item"><div class="bar-label">D (&lt;70)</div><div class="bar-track"><div class="bar-fill" style="width:${totalSiswa ? dist.D / totalSiswa * 100 : 0}%;background:linear-gradient(90deg,#dc2626 0%,#ef4444 100%);"></div></div><div class="bar-value">${dist.D}</div></div>
         </div>
       </div>
-
       <div class="dashboard-card">
         <h4>⚖️ Kedisiplinan Kelas</h4>
         <div class="stat-box">
@@ -1228,7 +1328,6 @@ function renderDashboard() {
           <div class="stat-item green"><div class="stat-label">Total Reward</div><div class="stat-value">${totalReward}</div></div>
         </div>
       </div>
-
       <div class="dashboard-card">
         <h4>🏆 Top 5 Siswa</h4>
         <div class="bar-chart">
@@ -1247,14 +1346,14 @@ function renderDataInfo() {
   const el = document.getElementById("dataInfo");
   if (!el) return;
   let totalNilai = 0;
-  Object.values(nilaiData).forEach(s => Object.entries(s).forEach(([k, v]) => { if (!k.includes("_") && typeof v === "number") totalNilai++; }));
+  Object.values(nilaiData).forEach(s => Object.entries(s).forEach(([k, v]) => { if (!k.includes("_") && k !== "UJIAN" && typeof v === "number") totalNilai++; }));
   el.innerHTML = `<div class="data-info-grid">
     <div class="data-info-item"><div class="data-info-label">Total Siswa</div><div class="data-info-value">${students.length}</div></div>
     <div class="data-info-item"><div class="data-info-label">Mata Pelajaran</div><div class="data-info-value">${mapelList.length}</div></div>
     <div class="data-info-item"><div class="data-info-label">Nilai Terinput</div><div class="data-info-value">${totalNilai}</div></div>
     <div class="data-info-item"><div class="data-info-label">Total Kasus</div><div class="data-info-value">${(appData.kasus || []).length}</div></div>
     <div class="data-info-item"><div class="data-info-label">Total Reward</div><div class="data-info-value">${(appData.reward || []).length}</div></div>
-    <div class="data-info-item"><div class="data-info-label">Riwayat Input</div><div class="data-info-value">${(appData.riwayat || []).length}</div></div>
+    <div class="data-info-item"><div class="data-info-label">Riwayat</div><div class="data-info-value">${(appData.riwayat || []).length}</div></div>
   </div>`;
 }
 
@@ -1267,7 +1366,7 @@ function renderRiwayat() {
     const s = students.find(x => x.nis === r.nis);
     const m = mapelList.find(x => x.kode === r.mapel);
     const tgl = new Date(r.waktu).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" });
-    const txt = r.aksi === "input-tp" ? `${m?.nama || r.mapel} — ${r.bab} • ${r.jumlahTP} TP` : r.detail || r.aksi;
+    const txt = r.aksi === "input-tp" ? `${m?.nama || r.mapel} — ${r.bab} • ${r.jumlahTP} TP` : (r.detail || r.aksi);
     return `<div style="padding:10px 12px;border-bottom:1px solid var(--gray-100);font-size:12.5px;">
       <div style="font-weight:600;">${s?.nama || r.nis || "-"}</div>
       <div style="color:var(--gray-500);font-size:11px;">${txt} • ${tgl}</div>
@@ -1334,6 +1433,7 @@ function gantiSemester(s) {
   saveData();
   document.getElementById("semesterLabel").textContent = "Semester " + s;
   updateSemesterButtons();
+  renderStudentList();
   showToast(`📅 Semester ${s} aktif`, "info");
 }
 
@@ -1356,8 +1456,6 @@ function selectAllCetak(checked) {
 function cetakBatch() {
   const selected = Array.from(document.querySelectorAll(".cetakCheckbox:checked")).map(c => c.value);
   if (!selected.length) return showToast("Pilih minimal 1 siswa!", "error");
-
-  // Generate semua rapor ke container sementara
   const temp = document.createElement("div");
   temp.id = "batchPrintContainer";
   temp.style.position = "absolute";
@@ -1365,27 +1463,17 @@ function cetakBatch() {
   temp.style.top = "0";
   temp.style.width = "1000px";
   document.body.appendChild(temp);
-
-  // Simpan tampilan asli
   const originalHTML = document.getElementById("raporView").innerHTML;
-
   let allHTML = "";
   selected.forEach(nis => {
     showRapor(nis);
     allHTML += document.getElementById("raporView").innerHTML + '<div style="page-break-after:always;"></div>';
   });
-
-  // Restore
   document.getElementById("raporView").innerHTML = originalHTML;
-
-  // Masukkan ke print container
   temp.innerHTML = allHTML;
-
-  // Sembunyikan app, tampilkan temp
   document.getElementById("app").style.display = "none";
   temp.style.position = "static";
   temp.style.left = "0";
-
   setTimeout(() => {
     window.print();
     setTimeout(() => {
@@ -1444,7 +1532,7 @@ function importData(event) {
 }
 
 function resetAllData() {
-  if (!confirm("⚠️ Yakin reset SEMUA data? Semua nilai, kasus, reward akan HILANG!")) return;
+  if (!confirm("⚠️ Reset SEMUA data? Semua nilai, kasus, reward akan HILANG!")) return;
   if (!confirm("KONFIRMASI TERAKHIR: Data tidak dapat dikembalikan. Lanjutkan?")) return;
   localStorage.removeItem(STORAGE_KEY);
   location.reload();
@@ -1454,6 +1542,7 @@ function resetAllData() {
 function initApp() {
   renderStudentList();
   populateInputSelects();
+  populateUjianSelects();
   populateKasusSelects();
   populateRewardSelects();
   document.getElementById("semesterLabel").textContent = "Semester " + SEMESTER_AKTIF;
